@@ -110,6 +110,14 @@ func main() {
 				return
 			}
 			log.Printf("Ping %v pong, %v\n", m, resp)
+			moisture, err := sendCMD(ctx, Msg{
+				Cmd: CmdReadMoisture,
+			}, &radio)
+			if err != nil {
+				log.Printf("Failed to send read moisture %v: %s\n", m, err.Error())
+				return
+			}
+			log.Printf("Current moisture %d\n", moisture.Val1)
 			_, err = sendCMD(ctx, Msg{
 				Cmd:  CmdDelay,
 				Val1: 10000,
