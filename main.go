@@ -59,8 +59,16 @@ func readTemp(ctx context.Context, radio *gorf24.R) (resp Msg, err error) {
 func planForProduct(product string) (time.Time, func(timeIn time.Duration) int32) {
 	switch product {
 	case "brisket":
-		return time.Now().Add(6 * time.Hour), func(timeIn time.Duration) int32 {
-			return 165
+		return time.Now().Add(8 * time.Hour), func(timeIn time.Duration) int32 {
+			if timeIn < 3*time.Hour {
+				return 255
+			} else if timeIn < 7*time.Hour {
+				return 265
+			} else if timeIn < 8*time.Hour {
+				return 280
+			} else {
+				return 275
+			}
 		}
 	default:
 		panic(fmt.Sprintf("Unknown product %s", product))
@@ -77,7 +85,7 @@ func main() {
 		log.Fatal("Output path is required")
 	}
 
-	fp, err := os.OpenFile(*output, os.O_CREATE|os.O_APPEND, 0666)
+	fp, err := os.OpenFile(*output, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {
 		log.Fatal("Failed to open path %w", err)
 	}
@@ -106,8 +114,7 @@ func main() {
 	var (
 		fromStartStamp      string
 		fromStart           time.Duration
-		lastTemps           = make([]tempMark, 1, 5)
-		curValueIndex       = 0
+		lastTemp            float64
 		lastUpdated         time.Time
 		wrapped             bool
 		wrappedAt           time.Time
@@ -123,7 +130,7 @@ func main() {
 				<meta http-equiv="refresh" content="25">
 			</head>
 			<body><h1>From start <b>%s</b><br/>Current temp <b style="color:red">%2.2f</b> (Target <b>%d</b>)</h1>`,
-			lastTemps[curValueIndex].FromStart, lastTemps[curValueIndex].Temp, tempPlanFn(fromStart))
+			fromStart, lastTemp, tempPlanFn(fromStart))
 		if d := time.Since(lastUpdated); d > 1*time.Minute {
 			fmt.Fprintf(w, `<h2 style="color:red">STALE DATA!!!! last updated %s</h2>`, d)
 		}
@@ -158,23 +165,12 @@ func main() {
 				return
 			}
 			temp := float64(resp.Val1) / 100
-			mark := tempMark{
-				FromStart: fromStartStamp,
-				Temp:      temp,
-			}
-			if len(lastTemps) < 5 {
-				curValueIndex = len(lastTemps)
-				lastTemps = append(lastTemps, mark)
-			} else {
-				if curValueIndex == len(lastTemps)-1 {
-					curValueIndex = 0
-				}
-				lastTemps[curValueIndex] = mark
-				curValueIndex++
-			}
+			lastTemp = temp
+
 			lastUpdated = time.Now()
 			fmt.Fprintf(fp, "%s,%s,%f,%v\n", fromStartStamp, time.Now().Format(time.RFC1123), temp, wrapped)
 			log.Printf("%s: Current temp %f\n", fromStartStamp, temp)
+			fp.Sync()
 		}()
 	}
 }
